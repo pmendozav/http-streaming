@@ -10,6 +10,76 @@ import {TIME_FUDGE_FACTOR} from './ranges.js';
 const {createTimeRange} = videojs;
 
 /**
+ * A function to get a combined list of parts and segments with durations
+ * and indexes.
+ *
+ * @param {Playlist} playlist the playlist to get the list for.
+ *
+ * @return {Array} The part/segment list.
+ */
+const getPartSegments = (playlist) => ([] || playlist.segments).reduce((acc, segment, si) => {
+  if (segment.parts) {
+    segment.parts.forEach(function(part, pi) {
+      acc.push({duration: part.DURATION, segmentIndex: si, partIndex: pi});
+    });
+  } else {
+    acc.push({duration: segment.duration, segmentIndex: si, partIndex: null});
+  }
+  return acc;
+}, []);
+
+/**
+ * Get the number of seconds to hold back from the end of a
+ * live playlist.
+ *
+ * @param {Playlist} master the master playlist
+ * @param {Playlist} media the media playlist
+ * @return {number} the hold back in seconds.
+ */
+export const getHoldBack = (master, media) => {
+  if (media.endList) {
+    return 0;
+  }
+
+  const partSegments = getPartSegments(media);
+  const hasParts = partSegments.length &&
+    typeof partSegments[partSegments.length - 1].partIndex === 'number';
+
+  let lastThreeDurations = 0;
+
+  if (partSegments.length >= 3) {
+    for (let i = 0; i < 3; i++) {
+      lastThreeDurations += partSegments[partSegments.length - 1 - i].duration;
+    }
+  }
+
+  // dash suggestedPresentationDelay trumps everything
+  if (master && master.suggestedPresentationDelay) {
+    return master.suggestedPresentationDelay;
+
+  // look for "part" delays from ll-hls first
+  } else if (hasParts && media.serverControl && media.serverControl['PART-HOLD-BACK']) {
+    return media.serverControl['PART-HOLD-BACK'];
+  } else if (hasParts && media.partTargetDuration) {
+    return media.partTargetDuration * 3;
+  } else if (hasParts && lastThreeDurations) {
+    return lastThreeDurations;
+
+  // finally look for full segment delays
+  } else if (media.serverControl && media.serverControl['HOLD-BACK']) {
+    return media.serverControl['HOLD-BACK'];
+  } else if (media.targetDuration) {
+    // TODO: this should probably be targetDuration * 3
+    // but we use this for backwards compatability.
+    return partSegments[partSegments.length - 1].duration + media.targetDuration * 2;
+  } else if (lastThreeDurations) {
+    return lastThreeDurations;
+  }
+
+  return 0;
+};
+
+/**
  * walk backward until we find a duration we can use
  * or return a failure
  *
@@ -233,32 +303,29 @@ export const sumDurations = function(playlist, startIndex, endIndex) {
  * @function safeLiveIndex
  */
 export const safeLiveIndex = function(playlist, liveEdgePadding) {
-  if (!playlist.segments.length) {
+  const partSegments = getPartSegments(playlist);
+
+  if (!partSegments.length) {
     return 0;
   }
 
-  let i = playlist.segments.length;
-  const lastSegmentDuration = playlist.segments[i - 1].duration || playlist.targetDuration;
-  const safeDistance = typeof liveEdgePadding === 'number' ?
-    liveEdgePadding :
-    lastSegmentDuration + playlist.targetDuration * 2;
-
-  if (safeDistance === 0) {
-    return i;
+  if (typeof liveEdgePadding !== 'number') {
+    liveEdgePadding = getHoldBack(null, playlist);
   }
 
+  let i = partSegments.length;
   let distanceFromEnd = 0;
 
   while (i--) {
-    distanceFromEnd += playlist.segments[i].duration;
+    distanceFromEnd += partSegments[i].duration;
 
-    if (distanceFromEnd >= safeDistance) {
-      i++;
-      break;
+    if (distanceFromEnd >= liveEdgePadding) {
+      return partSegments[i].segmentIndex;
     }
   }
 
-  return Math.max(0, i);
+  // there is nowhere in the playlist that is a safe distance from live.
+  return 0;
 };
 
 /**
@@ -349,17 +416,7 @@ export const getMediaInfoForTime = function(
   startTime
 ) {
 
-  const partSegments = playlist.segments.reduce((acc, segment, si) => {
-    if (segment.parts) {
-      segment.parts.forEach(function(part, pi) {
-        acc.push({duration: part.DURATION, segmentIndex: si, partIndex: pi});
-      });
-    } else {
-      acc.push({duration: segment.duration, segmentIndex: si, partIndex: null});
-    }
-    return acc;
-  }, []);
-
+  const partSegments = getPartSegments(playlist);
   let time = currentTime - startTime;
 
   if (time < 0) {
@@ -384,8 +441,8 @@ export const getMediaInfoForTime = function(
     // We were unable to find a good segment within the playlist
     // so select the first segment
     return {
-      mediaIndex: partSegments[0].segmentIndex,
-      partIndex: partSegments[0].partIndex,
+      mediaIndex: partSegments[0] && partSegments[0].segmentIndex || 0,
+      partIndex: partSegments[0] && partSegments[0].partIndex || null,
       startTime: currentTime
     };
   }
@@ -409,15 +466,15 @@ export const getMediaInfoForTime = function(
   // Walk forward from startIndex in the playlist, subtracting durations
   // until we find a segment that contains `time` and return it
   for (let i = startIndex; i < partSegments.length; i++) {
-    const segment = partSegments[i];
+    const partSegment = partSegments[i];
 
-    time -= segment.duration + TIME_FUDGE_FACTOR;
+    time -= partSegment.duration + TIME_FUDGE_FACTOR;
 
     if (time < 0) {
       return {
-        mediaIndex: segment.segmentIndex,
-        startTime: startTime + sumDurations(playlist, startIndex, segment.segmentIndex),
-        partIndex: segment.partIndex
+        mediaIndex: partSegment.segmentIndex,
+        startTime: startTime + sumDurations(playlist, startIndex, partSegment.segmentIndex),
+        partIndex: partSegment.partIndex
       };
     }
   }
@@ -425,6 +482,7 @@ export const getMediaInfoForTime = function(
   // We are out of possible candidates so load the last one...
   return {
     mediaIndex: partSegments[partSegments.length - 1].segmentIndex,
+    partIndex: partSegments[partSegments.length - 1].partIndex,
     startTime: currentTime
   };
 };
@@ -560,6 +618,7 @@ export const isLowestEnabledRendition = (master, media) => {
 
 // exports
 export default {
+  getHoldBack,
   duration,
   seekable,
   safeLiveIndex,

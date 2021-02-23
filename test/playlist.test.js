@@ -574,7 +574,7 @@ QUnit.test('safeLiveIndex accounts for liveEdgePadding in simple case', function
   );
 
   assert.equal(
-    Playlist.safeLiveIndex(playlist, 0), 6,
+    Playlist.safeLiveIndex(playlist, 0), 5,
     'returns 6 when liveEdgePadding is 0 and duration is 6'
   );
 });
@@ -650,8 +650,97 @@ QUnit.test('safeLiveIndex accounts for liveEdgePadding in non-simple case', func
   );
 
   assert.equal(
-    Playlist.safeLiveIndex(playlist, 0), 6,
+    Playlist.safeLiveIndex(playlist, 0), 5,
     'returns 6 when liveEdgePadding is 0'
+  );
+});
+
+QUnit.test('getHoldBack works as expected', function(assert) {
+  const media = {
+    endList: true,
+    targetDuration: 5,
+    partTargetDuration: 1.1,
+    serverControl: {
+      'HOLD-BACK': 20,
+      'PART-HOLD-BACK': 2
+    },
+    segments: [
+      {duration: 4},
+      {duration: 3},
+      {duration: 4, parts: [
+        {DURATION: 1},
+        {DURATION: 1},
+        {DURATION: 1},
+        {DURATION: 0.5},
+        {DURATION: 0.5}
+      ]}
+    ]
+  };
+  const master = {
+    suggestedPresentationDelay: 10
+  };
+
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    0,
+    'returns 0 with endlist'
+  );
+
+  delete media.endList;
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    master.suggestedPresentationDelay,
+    'uses suggestedPresentationDelay'
+  );
+
+  delete master.suggestedPresentationDelay;
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    media.serverControl['PART-HOLD-BACK'],
+    'uses part hold back'
+  );
+
+  media.serverControl['PART-HOLD-BACK'] = null;
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    media.partTargetDuration * 3,
+    'uses part target duration * 3'
+  );
+
+  media.partTargetDuration = null;
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    2,
+    'uses last three part durations'
+  );
+
+  media.segments[media.segments.length - 1].parts = null;
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    media.serverControl['HOLD-BACK'],
+    'uses HOLD-BACK'
+  );
+
+  media.serverControl['HOLD-BACK'] = null;
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    (media.targetDuration * 2) + media.segments[media.segments.length - 1].duration,
+    'uses (targetDuration * 2) + last segment duration'
+  );
+
+  media.targetDuration = null;
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    11,
+    'uses last three segment durations'
+  );
+
+  media.segments.length = 0;
+
+  assert.equal(
+    Playlist.getHoldBack(master, media),
+    0,
+    'no possible holdback can be calculated'
   );
 });
 
