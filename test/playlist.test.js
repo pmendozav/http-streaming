@@ -661,18 +661,18 @@ QUnit.test('getHoldBack works as expected', function(assert) {
     targetDuration: 5,
     partTargetDuration: 1.1,
     serverControl: {
-      'HOLD-BACK': 20,
-      'PART-HOLD-BACK': 2
+      holdBack: 20,
+      partHoldBack: 2
     },
     segments: [
       {duration: 4},
       {duration: 3},
       {duration: 4, parts: [
-        {DURATION: 1},
-        {DURATION: 1},
-        {DURATION: 1},
-        {DURATION: 0.5},
-        {DURATION: 0.5}
+        {duration: 1},
+        {duration: 1},
+        {duration: 1},
+        {duration: 0.5},
+        {duration: 0.5}
       ]}
     ]
   };
@@ -696,11 +696,11 @@ QUnit.test('getHoldBack works as expected', function(assert) {
   delete master.suggestedPresentationDelay;
   assert.equal(
     Playlist.getHoldBack(master, media),
-    media.serverControl['PART-HOLD-BACK'],
+    media.serverControl.partHoldBack,
     'uses part hold back'
   );
 
-  media.serverControl['PART-HOLD-BACK'] = null;
+  media.serverControl.partHoldBack = null;
   assert.equal(
     Playlist.getHoldBack(master, media),
     media.partTargetDuration * 3,
@@ -717,11 +717,11 @@ QUnit.test('getHoldBack works as expected', function(assert) {
   media.segments[media.segments.length - 1].parts = null;
   assert.equal(
     Playlist.getHoldBack(master, media),
-    media.serverControl['HOLD-BACK'],
-    'uses HOLD-BACK'
+    media.serverControl.holdBack,
+    'uses hold back'
   );
 
-  media.serverControl['HOLD-BACK'] = null;
+  media.serverControl.holdBack = null;
   assert.equal(
     Playlist.getHoldBack(master, media),
     (media.targetDuration * 2) + media.segments[media.segments.length - 1].duration,

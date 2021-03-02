@@ -20,7 +20,8 @@ const {createTimeRange} = videojs;
 const getPartSegments = (playlist) => ([] || playlist.segments).reduce((acc, segment, si) => {
   if (segment.parts) {
     segment.parts.forEach(function(part, pi) {
-      acc.push({duration: part.DURATION, segmentIndex: si, partIndex: pi});
+      acc.push({duration: part.duration, segmentIndex: si, partIndex: pi});
+
     });
   } else {
     acc.push({duration: segment.duration, segmentIndex: si, partIndex: null});
@@ -58,16 +59,16 @@ export const getHoldBack = (master, media) => {
     return master.suggestedPresentationDelay;
 
   // look for "part" delays from ll-hls first
-  } else if (hasParts && media.serverControl && media.serverControl['PART-HOLD-BACK']) {
-    return media.serverControl['PART-HOLD-BACK'];
+  } else if (hasParts && media.serverControl && media.serverControl.partHoldBack) {
+    return media.serverControl.partHoldBack;
   } else if (hasParts && media.partTargetDuration) {
     return media.partTargetDuration * 3;
   } else if (hasParts && lastThreeDurations) {
     return lastThreeDurations;
 
   // finally look for full segment delays
-  } else if (media.serverControl && media.serverControl['HOLD-BACK']) {
-    return media.serverControl['HOLD-BACK'];
+  } else if (media.serverControl && media.serverControl.holdBack) {
+    return media.serverControl.holdBack;
   } else if (media.targetDuration) {
     // TODO: this should probably be targetDuration * 3
     // but we use this for backwards compatability.
