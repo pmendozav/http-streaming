@@ -132,7 +132,7 @@ export const updateMaster = (master, media, unchangedCheck = isPlaylistUnchanged
   if (media.skip) {
     const segments = [];
 
-    segments.length = media.skip['SKIPPED-SEGMENTS'];
+    segments.length = media.skip.skippedSegments;
 
     media.segments = segments.concat(media.segments);
   }
@@ -242,8 +242,9 @@ export default class PlaylistLoader extends EventTarget {
       let uri = resolveUrl(this.master.uri, media.uri);
       const query = [];
 
+      // TODO: check CAN skip until to verify we can skip until x segment
       // wait for the next part/segment
-      if (media.serverControl['CAN-BLOCK-RELOAD']) {
+      if (media.serverControl.canBlockReload) {
         const preloadSegment = media.preloadSegment;
 
         if (preloadSegment && preloadSegment.preloadHints) {
@@ -252,7 +253,7 @@ export default class PlaylistLoader extends EventTarget {
         query.push(`_HLS_msn=${media.mediaSequence + media.segments.length - 1}`);
       }
 
-      if (media.serverControl['CAN-SKIP-UNTIL']) {
+      if (media.serverControl.canSkipUntil) {
         query.push('_HLS_skip=YES');
       }
 
