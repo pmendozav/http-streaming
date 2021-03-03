@@ -184,7 +184,8 @@ export default class PlaylistLoader extends EventTarget {
 
       this.request = this.vhs_.xhr({
         uri: resolveUrl(this.master.uri, this.media().uri),
-        withCredentials: this.withCredentials
+        withCredentials: this.withCredentials,
+        timeout: this.vhs_.options_.playlistTimeout
       }, (error, req) => {
         // disposed
         if (!this.request) {
@@ -409,7 +410,8 @@ export default class PlaylistLoader extends EventTarget {
 
     this.request = this.vhs_.xhr({
       uri: playlist.resolvedUri,
-      withCredentials: this.withCredentials
+      withCredentials: this.withCredentials,
+      timeout: this.vhs_.options_.playlistTimeout
     }, (error, req) => {
       // disposed
       if (!this.request) {
@@ -589,6 +591,20 @@ export default class PlaylistLoader extends EventTarget {
     this.state = 'HAVE_MASTER';
 
     if (manifest.playlists) {
+      // only for live: sort using 'AVERAGE-BANDWIDTH' or 'BANDWIDTH'
+      const firstPlaylist = manifest.playlists[0];
+
+      if (firstPlaylist && !firstPlaylist.endList) {
+        const key = firstPlaylist.attributes['AVERAGE-BANDWIDTH'] ? 'AVERAGE-BANDWIDTH' : 'BANDWIDTH';
+
+        manifest.playlists.sort((p1, p2) => {
+          const b1 = Number.parseInt(p1.attributes[key], 10);
+          const b2 = Number.parseInt(p2.attributes[key], 10);
+
+          return (b1 > b2) ? 1 : ((b2 > b1) ? -1 : 0);
+        });
+      }
+
       this.master = manifest;
       addPropertiesToMaster(this.master, this.srcUri());
       // If the initial master playlist has playlists wtih segments already resolved,

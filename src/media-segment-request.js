@@ -897,6 +897,10 @@ export const mediaSegmentRequest = ({
       uri: segment.key.resolvedUri,
       responseType: 'arraybuffer'
     });
+
+    if (xhrOptions.keyTimeout) {
+      keyRequestOptions.timeout = xhrOptions.keyTimeout;
+    }
     const keyRequestCallback = handleKeyResponse(segment, finishProcessingFn);
     const keyXhr = xhr(keyRequestOptions, keyRequestCallback);
 

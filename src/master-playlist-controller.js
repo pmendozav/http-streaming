@@ -172,6 +172,8 @@ export class MasterPlaylistController extends videojs.EventTarget {
     this.requestOptions_ = {
       withCredentials,
       handleManifestRedirects,
+      keyTimeout: this.vhs_.options_.keyTimeout,
+      playlistTimeout: this.vhs_.options_.playlistTimeout,
       timeout: null
     };
 
@@ -433,14 +435,20 @@ export class MasterPlaylistController extends videojs.EventTarget {
 
     this.masterPlaylistLoader_.on('mediachange', () => {
       const media = this.masterPlaylistLoader_.media();
-      const requestTimeout = (media.targetDuration * 1.5) * 1000;
 
-      // If we don't have any more available playlists, we don't want to
-      // timeout the request.
-      if (isLowestEnabledRendition(this.masterPlaylistLoader_.master, this.masterPlaylistLoader_.media())) {
-        this.requestOptions_.timeout = 0;
+      if (media.endList) {
+        const requestTimeout = (media.targetDuration * 1.5) * 1000;
+
+        // If we don't have any more available playlists, we don't want to
+        // timeout the request.
+        if (isLowestEnabledRendition(this.masterPlaylistLoader_.master, this.masterPlaylistLoader_.media())) {
+          this.requestOptions_.timeout = 0;
+        } else {
+          this.requestOptions_.timeout = requestTimeout;
+        }
       } else {
-        this.requestOptions_.timeout = requestTimeout;
+        // use (1.1 * segment_duration) for timeout instead of target_duration
+        this.requestOptions_.timeout = 1000 * 1.1 * Math.max.apply(Math, media.segments.map(o => o.duration));
       }
 
       // TODO: Create a new event on the PlaylistLoader that signals
@@ -1007,6 +1015,12 @@ export class MasterPlaylistController extends videojs.EventTarget {
     const playlists = this.masterPlaylistLoader_.master.playlists;
     const enabledPlaylists = playlists.filter(isEnabled);
     const isFinalRendition = enabledPlaylists.length === 1 && enabledPlaylists[0] === currentPlaylist;
+
+    if (!currentPlaylist.endList &&
+      playlists[0].id === currentPlaylist.id &&
+      this.vhs_.options_.minBlacklistDurarion) {
+      blacklistDuration = this.vhs_.options_.minBlacklistDurarion;
+    }
 
     // Don't blacklist the only playlist unless it was blacklisted
     // forever
