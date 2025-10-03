@@ -30,7 +30,9 @@
     "posttest": "[ \"$CI_TEST_TYPE\" != 'coverage' ] || shx cat test/dist/coverage/text.txt",
     "version": "vjs-update-changelog --add --run-on-prerelease",
     "watch": "npm-run-all -p watch:*",
-    "watch:js": "npm run build:js -- -w"
+    "watch:js": "npm run build:js -- -w",
+    "build:dist": "npm-run-all -s clean build:js",
+    "prepare": "npm run build:dist"
   },
   "keywords": [
     "videojs",
